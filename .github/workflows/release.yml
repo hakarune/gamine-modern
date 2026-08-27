@@ -16,8 +16,14 @@ jobs:
       - name: Build .deb
         run: ./build-deb.sh "${GITHUB_REF_NAME#v}"
 
+      - name: Stage standalone HTML as a release asset
+        run: cp index.html "dist/gamine-${GITHUB_REF_NAME}.html"
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.deb
+          files: |
+            dist/*.deb
+            dist/*.html
           generate_release_notes: true
+          fail_on_unmatched_files: true
