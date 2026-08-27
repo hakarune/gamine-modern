@@ -158,5 +158,9 @@ else
 fi
 
 echo ">> Wrote $OUT"
-command -v lintian >/dev/null 2>&1 && lintian --no-tag-display-limit "$OUT" || true
-command -v dpkg-deb >/dev/null 2>&1 && dpkg-deb --info "$OUT" || true
+if command -v lintian >/dev/null 2>&1; then
+    lintian --no-tag-display-limit "$OUT" || true
+fi
+if command -v dpkg-deb >/dev/null 2>&1; then
+    dpkg-deb --info "$OUT" || true
+fi
