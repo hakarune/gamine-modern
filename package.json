@@ -1,0 +1,52 @@
+{
+  "name": "gamine-modern",
+  "version": "2.0.0",
+  "description": "Single-file HTML5 Canvas port of Gamine, the drawing game for very young children, with a Web Audio synth.",
+  "keywords": [
+    "gamine",
+    "kids",
+    "children",
+    "toddler",
+    "drawing",
+    "paint",
+    "canvas",
+    "game",
+    "educational",
+    "web-audio"
+  ],
+  "homepage": "https://github.com/hakarune/gamine-modern#readme",
+  "bugs": {
+    "url": "https://github.com/hakarune/gamine-modern/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hakarune/gamine-modern.git"
+  },
+  "license": "GPL-3.0-or-later",
+  "author": "hakarune",
+  "contributors": [
+    "Emmanuel Garette <gnunux@gnunux.info> (original C/GTK game)",
+    "Simon Kagedal Reimer <skagedal@gmail.com> (original C/GTK game)",
+    "Alex Panin <alex@linuxonly.ru> (original C/GTK game)",
+    "Alexey Loginov <loginov.alex.valer@gmail.com> (original C/GTK game)"
+  ],
+  "type": "module",
+  "main": "index.html",
+  "files": [
+    "index.html",
+    "gamine-modern.svg",
+    "gamine-modern.desktop.in",
+    "build-deb.sh",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "npx --yes serve --no-clipboard --listen 8080 .",
+    "dev": "npx --yes serve --no-clipboard --listen 8080 .",
+    "validate": "npx --yes html-validate index.html",
+    "build:deb": "./build-deb.sh",
+    "clean": "rm -rf dist build"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

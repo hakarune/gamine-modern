@@ -1,0 +1,17 @@
+# build output
+/dist/
+/build/
+*.deb
+
+# node
+/node_modules/
+npm-debug.log*
+
+# saved drawings (Gamine's "Save" writes these)
+gamine-*_*.png
+
+# editor / OS cruft
+.DS_Store
+*~
+.vscode/
+.idea/

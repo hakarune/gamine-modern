@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Gamine
+GenericName=Game for small children
+Comment=Drawing game for very young children
+Comment[fr]=Jeu de dessin pour les tout petits
+Exec=@BINDIR@/gamine-modern
+TryExec=@BINDIR@/gamine-modern
+Icon=gamine-modern
+Terminal=false
+Categories=Game;KidsGame;
+Keywords=children;kids;toddler;mouse;drawing;paint;draw;
+StartupNotify=false
+StartupWMClass=gamine-modern

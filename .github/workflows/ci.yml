@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate index.html
+        run: npx --yes html-validate index.html
+
+      - name: Shellcheck build-deb.sh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck build-deb.sh
+
+      - name: Build .deb
+        run: ./build-deb.sh
+
+      - name: Inspect package
+        run: dpkg-deb --info dist/*.deb && dpkg-deb --contents dist/*.deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gamine-modern-deb
+          path: dist/*.deb
+          if-no-files-found: error

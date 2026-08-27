@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Gamine</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M8 56c8-4 10-16 20-26L44 46C34 56 22 58 8 56z' fill='%23ffd43b'/%3E%3Crect x='38' y='4' width='14' height='30' rx='3' transform='rotate(45 45 19)' fill='%23ff6b6b'/%3E%3C/svg%3E">
+<style>
+  :root { color-scheme: light; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #fff;
+    /* Toddler-proofing: no scroll, no pinch-zoom, no long-press menu. */
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  #view {
+    display: block; position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    /* A pencil-ish cursor, echoing the original pencil.png. */
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M4 36c5-2 7-10 13-16L27 30C21 36 13 38 4 36z' fill='%23333'/%3E%3Crect x='22' y='2' width='9' height='22' rx='2' transform='rotate(45 26 13)' fill='%23ff6b6b' stroke='%23222' stroke-width='1.5'/%3E%3C/svg%3E") 2 38, crosshair;
+  }
+  /* Start / resume gate: audio + fullscreen need a user gesture. */
+  #gate {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1.2rem; text-align: center;
+    font: 600 clamp(20px, 5vw, 40px)/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #333; background: #fff;
+  }
+  #gate .scribble { font-size: clamp(60px, 22vw, 180px); line-height: 1; }
+  #gate small { display: block; font-weight: 400; font-size: clamp(13px, 2.6vw, 18px); color: #777; max-width: 32ch; }
+  #gate button {
+    font: inherit; padding: 0.6em 1.6em; border: 0; border-radius: 999px;
+    background: #ff6b6b; color: #fff; cursor: pointer;
+  }
+  #gate button:focus-visible { outline: 3px solid #333; outline-offset: 3px; }
+  #hint {
+    position: fixed; left: 0; bottom: 0; z-index: 5;
+    padding: 6px 12px; pointer-events: none;
+    font: 700 clamp(11px, 2.2vw, 15px)/1 system-ui, sans-serif;
+    color: #444; background: rgba(255,255,255,0.6);
+    transition: opacity 0.6s ease; opacity: 1;
+  }
+  #hint.faded { opacity: 0; }
+
+  /* Parent controls — touch has no physical keyboard. Small, corner,
+     and they only fade part-way so one tap always reaches them. */
+  #controls {
+    position: fixed; top: 0; right: 0; z-index: 6;
+    display: flex; gap: 6px; padding: 8px;
+    transition: opacity 0.6s ease; opacity: 1;
+  }
+  #controls.faded { opacity: 0.12; }
+  #controls button {
+    width: 46px; height: 46px; padding: 0; border: 0; border-radius: 12px;
+    font-size: 22px; line-height: 1; text-align: center;
+    background: rgba(255,255,255,0.65); color: #333; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #controls button.on { background: #ffd43b; }
+  #controls button:focus-visible { outline: 3px solid #333; outline-offset: 2px; }
+
+  /* Off-screen text field whose focus raises the soft keyboard. */
+  #kbd {
+    position: fixed; left: 50%; bottom: 0; width: 1px; height: 1px;
+    opacity: 0.01; border: 0; padding: 0; margin: 0;
+    font-size: 16px; background: transparent; color: transparent;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<p id="hint">drag to draw&nbsp;&nbsp;·&nbsp;&nbsp;tap to stamp&nbsp;&nbsp;·&nbsp;&nbsp;buttons&nbsp;↗&nbsp;&nbsp;·&nbsp;&nbsp;space = clear</p>
+<div id="controls" aria-label="Controls">
+  <button type="button" data-act="music" aria-label="Toggle music" title="Music">🎵</button>
+  <button type="button" data-act="kbd" aria-label="Show keyboard" title="Keyboard">⌨️</button>
+  <button type="button" data-act="save" aria-label="Save picture" title="Save">💾</button>
+  <button type="button" data-act="full" aria-label="Toggle fullscreen" title="Fullscreen">🖥️</button>
+</div>
+<input id="kbd" type="text" inputmode="text" autocomplete="off" autocorrect="off"
+       autocapitalize="characters" spellcheck="false" aria-hidden="true" tabindex="-1">
+<div id="gate" role="dialog" aria-label="Start Gamine">
+  <div class="scribble" aria-hidden="true">🖍️</div>
+  <div>Gamine</div>
+  <button id="startBtn" type="button" autofocus>Tap to play</button>
+  <small>Move the mouse or drag a finger to draw. Click or tap to stamp a star.
+  Press a letter key — or the ⌨️ button on a touchscreen — to stamp letters.</small>
+</div>
+
+<script>
+"use strict";
+/*
+ * Gamine — HTML5 Canvas port of the GTK/Cairo game by Emmanuel Garette et al.
+ * Original: https://sourceforge.net/projects/gamine-game  (GPL-3.0-or-later)
+ *
+ * The three pieces of behaviour ported from gamine.c:
+ *   1. Shape stamping   -> stampStar()  (from build_star / draw_star)
+ *   2. Color cycling    -> lineColor / objectColor  (from get_cairo_context)
+ *   3. Mouse / key logic -> drawLine() / stampChar() / keydown  (from draw_line / key_press)
+ * Sound samples are replaced by a small Web Audio synth (see Synth below).
+ */
+
+/* ---- Configuration (mirrors /etc/gamine.conf from the original) ---------- */
+const CONFIG = {
+  lineWidth:     10,   // gamine.conf: line_width  — stroke width of the drawn line
+  objectWeight:  15,   // gamine.conf: object_weight — star inner radius / text anchor
+  outerRadius:   20,   // build_star(): hard-coded outer radius in gamine.c
+  fontWeight:    50,   // gamine.conf: font_weight — stamped character size in px
+  colorChangeMs: 900,  // gamine.conf: timer_color_change — min time between line colours
+  music:         true, // start the ambient pad automatically after "Tap to play"
+};
+
+/* ---- Canvas: a persistent "paper" buffer blitted to a visible canvas ----- */
+const view = document.getElementById("view");
+let vctx = view.getContext("2d");
+let paper, pctx;          // offscreen persistent drawing surface
+let dpr = 1;              // device pixel ratio
+let S = 1;                // size scale for big screens (device pixels)
+
+function buildPaper(w, h) {
+  const np = document.createElement("canvas");
+  np.width = w; np.height = h;
+  const nc = np.getContext("2d");
+  nc.fillStyle = "#ffffff";
+  nc.fillRect(0, 0, w, h);
+  nc.lineJoin = "round";
+  if (paper) nc.drawImage(paper, 0, 0);   // preserve existing art on resize
+  paper = np; pctx = nc;
+}
+
+function resize() {
+  dpr = Math.max(1, window.devicePixelRatio || 1);
+  const cssW = window.innerWidth, cssH = window.innerHeight;
+  const w = Math.round(cssW * dpr), h = Math.round(cssH * dpr);
+  view.width = w; view.height = h;
+  view.style.width = cssW + "px";
+  view.style.height = cssH + "px";
+  // Logical scale: original tuned for ~1x desktop; scale up on large/hi-dpi screens.
+  S = Math.max(1, Math.min(cssW, cssH) / 720) * dpr;
+  buildPaper(w, h);
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* ---- Colour cycling (from get_cairo_context in gamine.c) ---------------- */
+
+// Lines: pastel. Each channel = ((rand()%128 + 127)/255 + 1) / 2  -> 0.75..1.0
+function lineColor() {
+  const ch = () => Math.round(((((Math.random() * 128 | 0) + 127) / 255) + 1) / 2 * 255);
+  return `rgb(${ch()},${ch()},${ch()})`;
+}
+// Stamps & text: dark. Each channel = random()%10 * 0.1  -> 0.0..0.9
+function objectColor() {
+  const ch = () => Math.round((Math.random() * 10 | 0) * 0.1 * 255);
+  return `rgb(${ch()},${ch()},${ch()})`;
+}
+
+let curLineColor = lineColor();
+let lastColorChange = 0;
+
+/* ---- Shape stamping (from build_star / draw_star in gamine.c) ----------- */
+function stampStar(mx, my) {
+  const spikeCount = (Math.random() * 6 | 0) + 2;         // random()%6 + 2  -> 2..7
+  const inner = CONFIG.objectWeight * S;                  // object_weight
+  const outer = CONFIG.outerRadius * S;                   // hard-coded 20
+  pctx.fillStyle = objectColor();                         // fresh dark colour per stamp
+  pctx.beginPath();
+  for (let i = 0; i < spikeCount + 1; i++) {
+    let x = mx + Math.cos((i * 2) * Math.PI / spikeCount) * inner;
+    let y = my + Math.sin((i * 2) * Math.PI / spikeCount) * inner;
+    if (i === 0) pctx.moveTo(x, y); else pctx.lineTo(x, y);
+    x = mx + Math.cos((i * 2 + 1) * Math.PI / spikeCount) * outer;
+    y = my + Math.sin((i * 2 + 1) * Math.PI / spikeCount) * outer;
+    pctx.lineTo(x, y);
+  }
+  pctx.closePath();
+  pctx.fill();
+  synth.stamp();
+}
+
+/* ---- Character stamping (from build_string / draw_string in gamine.c) --- */
+function stampChar(ch, mx, my) {
+  pctx.fillStyle = objectColor();
+  const size = Math.round(CONFIG.fontWeight * S);
+  pctx.font = `bold ${size}px system-ui, "Segoe UI", Roboto, sans-serif`;
+  pctx.textBaseline = "alphabetic";
+  // Original anchors text at (mx-15, my+15).
+  pctx.fillText(ch, mx - 15 * S, my + 15 * S);
+  synth.stamp();
+  // Typewriter advance so several letters in a row don't land on top of
+  // each other (matters most for the on-screen keyboard).
+  pointer.x += size * 0.72;
+  if (pointer.x > view.width - size) { pointer.x = size; pointer.y += size * 1.25; }
+  if (pointer.y > view.height - size) pointer.y = size;
+}
+
+/* ---- Mouse line logic (from draw_line in gamine.c) --------------------- */
+let xold = -1, yold = -1;   // -1 sentinel: "no previous point yet"
+
+function drawLine(mx, my) {
+  const now = performance.now();
+  // "do not change color at every move" — only past the timer_color_change window
+  if (now - lastColorChange > CONFIG.colorChangeMs) {
+    lastColorChange = now;
+    curLineColor = lineColor();
+    synth.tick();
+  }
+  if (xold !== -1 && yold !== -1) {
+    pctx.strokeStyle = curLineColor;
+    pctx.lineWidth = CONFIG.lineWidth * S;
+    pctx.lineCap = "round";           // CAIRO_LINE_CAP_ROUND — no gaps in the path
+    pctx.beginPath();
+    pctx.moveTo(xold, yold);
+    pctx.lineTo(mx, my);
+    pctx.stroke();
+  }
+  xold = mx + 1;   // original does event->x + 1
+  yold = my;
+}
+
+function clearPaper() {
+  pctx.fillStyle = "#ffffff";
+  pctx.fillRect(0, 0, paper.width, paper.height);
+  xold = yold = -1;
+  synth.clearSound();
+}
+
+/* ---- Pointer input --------------------------------------------------- */
+let pointerActive = false;
+
+function toCanvas(e) {
+  const r = view.getBoundingClientRect();
+  return [
+    (e.clientX - r.left) * (view.width / r.width),
+    (e.clientY - r.top) * (view.height / r.height),
+  ];
+}
+
+view.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  const [x, y] = toCanvas(e);
+  pointer.x = x; pointer.y = y;   // key-stamps land where you last touched
+  pointerActive = true;
+  xold = yold = -1;         // start a fresh line segment at the touch point
+  stampStar(x, y);
+  fadeHintSoon();
+}, { passive: false });
+
+view.addEventListener("pointermove", (e) => {
+  const [x, y] = toCanvas(e);
+  // Mouse draws on hover (as in the original); touch/pen only while pressed.
+  if (e.pointerType === "mouse" || pointerActive) drawLine(x, y);
+}, { passive: true });
+
+function endPointer(e) {
+  if (e && e.pointerType !== "mouse") { xold = yold = -1; }
+  pointerActive = false;
+}
+view.addEventListener("pointerup", endPointer);
+view.addEventListener("pointercancel", endPointer);
+view.addEventListener("pointerleave", (e) => { if (e.pointerType !== "mouse") endPointer(e); });
+view.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* ---- Keyboard (from key_press in gamine.c) -------------------------- */
+let heldKey = null;   // repeat suppression (lastkeyval)
+let pointer = { x: view.width / 2, y: view.height / 2 };   // where key-stamps land
+view.addEventListener("pointermove", (e) => {
+  const [x, y] = toCanvas(e); pointer.x = x; pointer.y = y;
+}, { passive: true });
+
+window.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); savePicture(); }
+    return;
+  }
+  if (e.repeat) return;               // original: "Disable repeats" (lastkeyval)
+  switch (e.key) {
+    case "Escape":                       // original: quit
+      if (document.fullscreenElement) document.exitFullscreen();
+      return;
+    case " ":                            // original: clear the screen
+      e.preventDefault();
+      clearPaper();
+      return;
+    case "PrintScreen":                  // original: save PNG
+      savePicture();
+      return;
+    case "f": case "F":
+      toggleFullscreen();
+      return;
+    case "m": case "M":
+      synth.toggleMusic();
+      return;
+    case "s":                            // convenience alias for save
+      savePicture();
+      return;
+  }
+  // Any other printable single character -> stamp it (with repeat suppression)
+  if (e.key.length === 1 && e.key !== heldKey && !e.repeat) {
+    heldKey = e.key;
+    stampChar(e.key, pointer.x, pointer.y);
+  }
+});
+window.addEventListener("keyup", () => { heldKey = null; });
+
+/* ---- Save picture (from save_picture in gamine.c) ------------------- */
+let lastSave = 0;
+function savePicture() {
+  const now = performance.now();
+  if (now - lastSave < 1500) return;   // debounce: toddlers hammer keys
+  lastSave = now;
+  const t = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  const name = `gamine-${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}_` +
+               `${p(t.getHours())}-${p(t.getMinutes())}-${p(t.getSeconds())}.png`;
+  paper.toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, "image/png");
+  flashHint("saved " + name);
+}
+
+/* ---- Fullscreen ---------------------------------------------------- */
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+}
+
+/* ---- Bottom hint bar (echoes display_help in gamine.c) ------------- */
+const hint = document.getElementById("hint");
+const controls = document.getElementById("controls");
+let hintTimer = 0;
+const defaultHint = hint.innerHTML;
+function showChrome() {
+  hint.classList.remove("faded");
+  controls.classList.remove("faded");
+}
+function hideChrome() {
+  hint.classList.add("faded");
+  controls.classList.add("faded");
+}
+function fadeHintSoon() {
+  showChrome();
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(hideChrome, 6000);
+}
+function flashHint(msg) {
+  hint.textContent = msg;
+  showChrome();
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => {
+    hint.innerHTML = defaultHint;
+    hideChrome();
+  }, 2500);
+}
+
+/* ---- On-screen controls + soft keyboard (touch has no keys) -------- */
+const kbd = document.getElementById("kbd");
+const kbdBtn = controls.querySelector('[data-act="kbd"]');
+const musicBtn = controls.querySelector('[data-act="music"]');
+
+controls.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  fadeHintSoon();
+  if (!synth.ctx) { synth.init(); synth.resume(); }   // in case the gate was skipped
+  switch (btn.dataset.act) {
+    case "music":
+      synth.toggleMusic();
+      musicBtn.classList.toggle("on", synth.musicOn);
+      break;
+    case "kbd":
+      if (document.activeElement === kbd) kbd.blur();
+      else kbd.focus({ preventScroll: true });
+      break;
+    case "save":
+      savePicture();
+      break;
+    case "full":
+      toggleFullscreen();
+      break;
+  }
+});
+
+// The soft keyboard delivers text via 'input', not reliable 'keydown'.
+kbd.addEventListener("input", () => {
+  for (const ch of kbd.value) {
+    if (ch.trim() !== "") stampChar(ch, pointer.x, pointer.y);
+  }
+  kbd.value = "";
+});
+kbd.addEventListener("focus", () => kbdBtn.classList.add("on"));
+kbd.addEventListener("blur", () => kbdBtn.classList.remove("on"));
+
+/* ---- Render loop: blit paper -> screen ---------------------------- */
+function frame() {
+  vctx.drawImage(paper, 0, 0);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ======================================================================
+ * Web Audio synth — replaces the random .wav/.ogg sample table and the
+ * looping background music from gamine.c (play_random_sound / playbin).
+ * Every stamp fires one randomly chosen "voice"; a soft tick marks each
+ * line-colour change; 'm' toggles a gentle ambient pad.
+ * ==================================================================== */
+class Synth {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.musicOn = false;
+    this.musicNodes = null;
+    // C major pentatonic across two octaves — always consonant.
+    const base = 261.63;
+    const ratios = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3];
+    this.scale = ratios.concat(ratios.map((r) => r * 2)).map((r) => base * r);
+    this.noise = null;
+  }
+
+  init() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.35;
+    this.master.connect(this.ctx.destination);
+    // Pre-baked 1s white-noise buffer, reused for percussive hits.
+    const len = this.ctx.sampleRate;
+    this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = this.noise.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  resume() { if (this.ctx && this.ctx.state === "suspended") this.ctx.resume(); }
+  pick() { return this.scale[Math.random() * this.scale.length | 0]; }
+
+  env(node, t0, attack, dur, peak) {
+    const g = node.gain;
+    g.setValueAtTime(0.0001, t0);
+    g.exponentialRampToValueAtTime(peak, t0 + attack);
+    g.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  }
+
+  tone(freq, dur, type, peak, glideTo) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + dur);
+    this.env(gain, t0, 0.008, dur, peak);
+    osc.connect(gain).connect(this.master);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+  }
+
+  chime() {
+    const f = this.pick();
+    this.tone(f, 0.5, "sine", 0.3);
+    this.tone(f * 1.5, 0.4, "sine", 0.12);
+  }
+  blip() {
+    this.tone(this.pick(), 0.18, "triangle", 0.3);
+  }
+  swoop() {
+    const f = this.pick();
+    this.tone(f, 0.3, "sawtooth", 0.16, f * (Math.random() < 0.5 ? 2 : 0.5));
+  }
+  noiseHit() {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.playbackRate.value = 0.6 + Math.random() * 1.4;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 400 + Math.random() * 1800;
+    bp.Q.value = 6;
+    const gain = this.ctx.createGain();
+    this.env(gain, t0, 0.005, 0.22, 0.25);
+    src.connect(bp).connect(gain).connect(this.master);
+    src.start(t0);
+    src.stop(t0 + 0.3);
+  }
+
+  stamp() {
+    if (!this.ctx) return;
+    this.resume();
+    [this.blip, this.chime, this.swoop, this.noiseHit][Math.random() * 4 | 0].call(this);
+  }
+  tick() {
+    if (!this.ctx) return;
+    this.tone(this.scale[this.scale.length - 1] * 2, 0.09, "sine", 0.05);
+  }
+  clearSound() {
+    if (!this.ctx) return;
+    this.resume();
+    for (let i = 0; i < 4; i++) {
+      setTimeout(() => this.tone(this.scale[3 - i], 0.25, "sine", 0.2), i * 70);
+    }
+  }
+
+  toggleMusic(force) {
+    if (!this.ctx) return;
+    const want = force === undefined ? !this.musicOn : force;
+    if (want === this.musicOn) return;
+    this.musicOn = want;
+    if (want) {
+      const t0 = this.ctx.currentTime;
+      const bus = this.ctx.createGain();
+      bus.gain.value = 0.0001;
+      bus.gain.exponentialRampToValueAtTime(0.08, t0 + 3);
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 700;
+      const lfo = this.ctx.createOscillator();
+      const lfoGain = this.ctx.createGain();
+      lfo.frequency.value = 0.06; lfoGain.gain.value = 300;
+      lfo.connect(lfoGain).connect(lp.frequency); lfo.start();
+      const oscs = [130.81, 196.0, 261.63, 392.0].map((f, i) => {
+        const o = this.ctx.createOscillator();
+        o.type = i % 2 ? "sine" : "triangle";
+        o.frequency.value = f;
+        o.detune.value = (Math.random() * 8 - 4);
+        const g = this.ctx.createGain();
+        g.gain.value = 0.25 / (i + 1);
+        o.connect(g).connect(lp);
+        o.start();
+        return o;
+      });
+      lp.connect(bus).connect(this.master);
+      this.musicNodes = { bus, oscs, lfo };
+      flashHint("music on");
+    } else {
+      const { bus, oscs, lfo } = this.musicNodes || {};
+      if (bus) {
+        const t0 = this.ctx.currentTime;
+        bus.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.5);
+        setTimeout(() => { oscs.forEach((o) => o.stop()); lfo.stop(); }, 1700);
+      }
+      this.musicNodes = null;
+      flashHint("music off");
+    }
+  }
+}
+const synth = new Synth();
+
+/* ---- Start gate: unlock audio + go fullscreen on first gesture ----- */
+const gate = document.getElementById("gate");
+document.getElementById("startBtn").addEventListener("click", () => {
+  synth.init();
+  synth.resume();
+  if (CONFIG.music) { synth.toggleMusic(true); musicBtn.classList.add("on"); }
+  gate.style.display = "none";
+  toggleFullscreen();
+  fadeHintSoon();
+});
+</script>
+</body>
+</html>

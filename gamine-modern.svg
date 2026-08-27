@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="48" fill="#ffffff"/>
+  <!-- crayon scribble -->
+  <path d="M40 176 C 80 96, 120 236, 168 140 S 220 120, 224 92"
+        fill="none" stroke="#4dabf7" stroke-width="16" stroke-linecap="round"/>
+  <path d="M40 208 C 96 168, 132 252, 200 188"
+        fill="none" stroke="#ffd43b" stroke-width="16" stroke-linecap="round"/>
+  <!-- a stamped star, 5 spikes, echoing build_star() -->
+  <path d="M92 74 l12 26 28 3 -21 19 6 28 -25-14 -25 14 6-28 -21-19 28-3z" fill="#ff6b6b"/>
+  <!-- pencil -->
+  <g transform="rotate(45 188 168)">
+    <rect x="176" y="96" width="24" height="120" rx="6" fill="#ff922b" stroke="#222" stroke-width="4"/>
+    <path d="M176 216 h24 l-12 24z" fill="#333"/>
+    <rect x="176" y="96" width="24" height="16" fill="#e64980" stroke="#222" stroke-width="4"/>
+  </g>
+</svg>
