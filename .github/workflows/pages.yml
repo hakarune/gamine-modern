@@ -29,10 +29,10 @@ jobs:
           cp index.html _site/
           cp gamine-modern.svg _site/
 
+      # Requires a one-time manual step first:
+      #   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
+      # (GitHub does not let a workflow token enable Pages on this repo.)
       - uses: actions/configure-pages@v5
-        with:
-          # Turn Pages on for the repo if it isn't already.
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
