@@ -16,8 +16,7 @@ toolchain, one `index.html`.
 
 ## Play
 
-- **Online:** open the GitHub Pages deployment (enable Pages → "GitHub Actions"
-  in the repo settings; the `pages` workflow publishes `index.html`).
+- **Online:** <https://hakarune.github.io/gamine-modern/>
 - **Locally:** just open `index.html` in any modern browser. Or serve it:
 
   ```sh
@@ -50,8 +49,8 @@ The cluster dims after a few seconds and returns on the next tap.
 
 ## What was ported from the C source
 
-The three pieces of logic the task called for, lifted straight out of
-`gamine.c` (see the comments in `index.html` that name each original function):
+The core drawing logic is lifted straight from `gamine.c`. The comments in
+`index.html` name each original function:
 
 ### Shape stamping — `build_star()` / `draw_star()`
 
@@ -102,6 +101,10 @@ line-colour change, and an optional ambient pad for the background music.
 | `music` | `background_music` | start the ambient pad on launch |
 
 ## Packaging a `.deb`
+
+A prebuilt package is attached to every [release][rel]. To build your own:
+
+[rel]: https://github.com/hakarune/gamine-modern/releases
 
 `build-deb.sh` produces a Debian package that installs the app plus a
 launcher which opens it fullscreen in the best available browser
